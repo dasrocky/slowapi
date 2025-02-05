@@ -79,7 +79,13 @@ def _rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Re
     that was hit. If no limit is hit, the countdown is added to headers.
     """
     response = JSONResponse(
-        {"error": f"Rate limit exceeded: {exc.detail}"}, status_code=429
+        status_code=429,
+        content={
+            "status": 429,
+            "timestamp": datetime.now().isoformat(),
+            "message": f"Rate limit exceeded: {exc.detail}",
+            "content": None,
+        },
     )
     response = request.app.state.limiter._inject_headers(
         response, request.state.view_rate_limit
@@ -368,9 +374,9 @@ class Limiter:
         The backend that keeps track of consumption of endpoints vs limits
         """
         if self._storage_dead and self._in_memory_fallback_enabled:
-            assert (
-                self._fallback_limiter
-            ), "Fallback limiter is needed when in memory fallback is enabled"
+            assert self._fallback_limiter, (
+                "Fallback limiter is needed when in memory fallback is enabled"
+            )
             return self._fallback_limiter
         else:
             return self._limiter
@@ -634,8 +640,7 @@ class Limiter:
                 raise
             if self._in_memory_fallback_enabled and not self._storage_dead:
                 self.logger.warning(
-                    "Rate limit storage unreachable - falling back to"
-                    " in-memory storage"
+                    "Rate limit storage unreachable - falling back to in-memory storage"
                 )
                 self._storage_dead = True
                 self._check_request_limit(request, endpoint_func, in_middleware)
